@@ -8,8 +8,7 @@
 {
     <div class="language-selector">
     @{
-        var request = httpContextAccessor.HttpContext.Request;
-        var rawUrl = request.Path + request.QueryString;
+        var rawUrl = webHelper.GetRawUrl(httpContextAccessor.HttpContext.Request);
 
         if (Model.UseImages)
         {
@@ -34,7 +33,7 @@
                 Selected = lang.Id.Equals(Model.CurrentLanguageId)
             });
 
-            @Html.DropDownList("customerlanguage", languages, new { onchange = "setLocation(this.value);" })
+            <select id="customerlanguage" name="customerlanguage" asp-items="@languages" onchange="setLocation(this.value);"></select>
         }
     }
     </div>

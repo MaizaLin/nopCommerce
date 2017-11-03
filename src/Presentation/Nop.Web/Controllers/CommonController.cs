@@ -1,13 +1,11 @@
-﻿
-using System;
-using Microsoft.AspNetCore.Http;
+﻿using System;
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Nop.Core;
 using Nop.Core.Domain;
 using Nop.Core.Domain.Common;
 using Nop.Core.Domain.Customers;
 using Nop.Core.Domain.Localization;
-using Nop.Core.Domain.Messages;
 using Nop.Core.Domain.Tax;
 using Nop.Core.Domain.Vendors;
 using Nop.Services.Common;
@@ -17,7 +15,6 @@ using Nop.Services.Logging;
 using Nop.Services.Messages;
 using Nop.Services.Vendors;
 using Nop.Web.Factories;
-using Nop.Web.Framework;
 using Nop.Web.Framework.Localization;
 using Nop.Web.Framework.Mvc.Filters;
 using Nop.Web.Framework.Security;
@@ -37,17 +34,14 @@ namespace Nop.Web.Controllers
         private readonly ILocalizationService _localizationService;
         private readonly IWorkContext _workContext;
         private readonly IStoreContext _storeContext;
-        private readonly IQueuedEmailService _queuedEmailService;
-        private readonly IEmailAccountService _emailAccountService;
         private readonly IThemeContext _themeContext;
         private readonly IGenericAttributeService _genericAttributeService;
         private readonly ICustomerActivityService _customerActivityService;
         private readonly IVendorService _vendorService;
         private readonly IWorkflowMessageService _workflowMessageService;
-
-        private readonly TaxSettings _taxSettings;
+        private readonly ILogger _logger;
+        
         private readonly StoreInformationSettings _storeInformationSettings;
-        private readonly EmailAccountSettings _emailAccountSettings;
         private readonly CommonSettings _commonSettings;
         private readonly LocalizationSettings _localizationSettings;
         private readonly CaptchaSettings _captchaSettings;
@@ -55,7 +49,7 @@ namespace Nop.Web.Controllers
         
         #endregion
         
-        #region Constructors
+        #region Ctor
 
         public CommonController(ICommonModelFactory commonModelFactory,
             ILanguageService languageService,
@@ -63,16 +57,13 @@ namespace Nop.Web.Controllers
             ILocalizationService localizationService,
             IWorkContext workContext,
             IStoreContext storeContext,
-            IQueuedEmailService queuedEmailService,
-            IEmailAccountService emailAccountService,
             IThemeContext themeContext,
             IGenericAttributeService genericAttributeService,
             ICustomerActivityService customerActivityService,
             IVendorService vendorService,
             IWorkflowMessageService workflowMessageService,
-            TaxSettings taxSettings,
+            ILogger logger,
             StoreInformationSettings storeInformationSettings,
-            EmailAccountSettings emailAccountSettings,
             CommonSettings commonSettings,
             LocalizationSettings localizationSettings,
             CaptchaSettings captchaSettings,
@@ -84,17 +75,13 @@ namespace Nop.Web.Controllers
             this._localizationService = localizationService;
             this._workContext = workContext;
             this._storeContext = storeContext;
-            this._queuedEmailService = queuedEmailService;
-            this._emailAccountService = emailAccountService;
             this._themeContext = themeContext;
             this._genericAttributeService = genericAttributeService;
             this._customerActivityService = customerActivityService;
             this._vendorService = vendorService;
             this._workflowMessageService = workflowMessageService;
-
-            this._taxSettings = taxSettings;
+            this._logger = logger;
             this._storeInformationSettings = storeInformationSettings;
-            this._emailAccountSettings = emailAccountSettings;
             this._commonSettings = commonSettings;
             this._localizationSettings = localizationSettings;
             this._captchaSettings = captchaSettings;
@@ -108,13 +95,16 @@ namespace Nop.Web.Controllers
         //page not found
         public virtual IActionResult PageNotFound()
         {
-#if NET451
             if (_commonSettings.Log404Errors)
-                _logger.Log();
-#endif
+            {
+                var statusCodeReExecuteFeature = HttpContext?.Features?.Get<IStatusCodeReExecuteFeature>();
+                //TODO add locale resource
+                _logger.Error($"Error 404. The requested page ({statusCodeReExecuteFeature?.OriginalPath}) was not found", 
+                    customer: _workContext.CurrentCustomer);
+            }
 
-            this.Response.StatusCode = 404;
-            this.Response.ContentType = "text/html";
+            Response.StatusCode = 404;
+            Response.ContentType = "text/html";
 
             return View();
         }
@@ -126,31 +116,30 @@ namespace Nop.Web.Controllers
         public virtual IActionResult SetLanguage(int langid, string returnUrl = "")
         {
             var language = _languageService.GetLanguageById(langid);
-            if (language != null && language.Published)
-            {
-                _workContext.WorkingLanguage = language;
-            }
+            if (!language?.Published ?? false)
+                language = _workContext.WorkingLanguage;
 
             //home page
-            if (String.IsNullOrEmpty(returnUrl))
+            if (string.IsNullOrEmpty(returnUrl))
                 returnUrl = Url.RouteUrl("HomePage");
 
             //prevent open redirection attack
             if (!Url.IsLocalUrl(returnUrl))
                 returnUrl = Url.RouteUrl("HomePage");
-#if NET451
+
             //language part in URL
             if (_localizationSettings.SeoFriendlyUrlsForLanguagesEnabled)
             {
-                string applicationPath = HttpContext.Request.ApplicationPath;
-                if (returnUrl.IsLocalizedUrl(applicationPath, true))
-                {
-                    //already localized URL
-                    returnUrl = returnUrl.RemoveLanguageSeoCodeFromRawUrl(applicationPath);
-                }
-                returnUrl = returnUrl.AddLanguageSeoCodeToRawUrl(applicationPath, _workContext.WorkingLanguage);
+                //remove current language code if it's already localized URL
+                if (returnUrl.IsLocalizedUrl(this.Request.PathBase, true, out Language _))
+                    returnUrl = returnUrl.RemoveLanguageSeoCodeFromUrl(this.Request.PathBase, true);
+
+                //and add code of passed language
+                returnUrl = returnUrl.AddLanguageSeoCodeToUrl(this.Request.PathBase, true, language);
             }
-#endif
+
+            _workContext.WorkingLanguage = language;
+
             return Redirect(returnUrl);
         }
 
@@ -163,7 +152,7 @@ namespace Nop.Web.Controllers
                 _workContext.WorkingCurrency = currency;
 
             //home page
-            if (String.IsNullOrEmpty(returnUrl))
+            if (string.IsNullOrEmpty(returnUrl))
                 returnUrl = Url.RouteUrl("HomePage");
 
             //prevent open redirection attack
@@ -181,7 +170,7 @@ namespace Nop.Web.Controllers
             _workContext.TaxDisplayType = taxDisplayType;
 
             //home page
-            if (String.IsNullOrEmpty(returnUrl))
+            if (string.IsNullOrEmpty(returnUrl))
                 returnUrl = Url.RouteUrl("HomePage");
 
             //prevent open redirection attack
@@ -190,7 +179,6 @@ namespace Nop.Web.Controllers
 
             return Redirect(returnUrl);
         }
-
 
         //contact us page
         [HttpsRequirement(SslRequirement.Yes)]
@@ -202,6 +190,7 @@ namespace Nop.Web.Controllers
             model = _commonModelFactory.PrepareContactUsModel(model, false);
             return View(model);
         }
+
         [HttpPost, ActionName("ContactUs")]
         [PublicAntiForgery]
         [ValidateCaptcha]
@@ -219,8 +208,8 @@ namespace Nop.Web.Controllers
 
             if (ModelState.IsValid)
             {
-                string subject = _commonSettings.SubjectFieldOnContactUsForm ? model.Subject : null;
-                string body = Core.Html.HtmlHelper.FormatText(model.Enquiry, false, true, false, false, false, false);
+                var subject = _commonSettings.SubjectFieldOnContactUsForm ? model.Subject : null;
+                var body = Core.Html.HtmlHelper.FormatText(model.Enquiry, false, true, false, false, false, false);
 
                 _workflowMessageService.SendContactUsMessage(_workContext.WorkingLanguage.Id,
                     model.Email.Trim(), model.FullName, subject, body);
@@ -236,6 +225,7 @@ namespace Nop.Web.Controllers
 
             return View(model);
         }
+
         //contact vendor page
         [HttpsRequirement(SslRequirement.Yes)]
         public virtual IActionResult ContactVendor(int vendorId)
@@ -251,6 +241,7 @@ namespace Nop.Web.Controllers
             model = _commonModelFactory.PrepareContactVendorModel(model, vendor, false);
             return View(model);
         }
+
         [HttpPost, ActionName("ContactVendor")]
         [PublicAntiForgery]
         [ValidateCaptcha]
@@ -273,8 +264,8 @@ namespace Nop.Web.Controllers
 
             if (ModelState.IsValid)
             {
-                string subject = _commonSettings.SubjectFieldOnContactUsForm ? model.Subject : null;
-                string body = Core.Html.HtmlHelper.FormatText(model.Enquiry, false, true, false, false, false, false);
+                var subject = _commonSettings.SubjectFieldOnContactUsForm ? model.Subject : null;
+                var body = Core.Html.HtmlHelper.FormatText(model.Enquiry, false, true, false, false, false, false);
 
                 _workflowMessageService.SendContactVendorMessage(vendor, _workContext.WorkingLanguage.Id,
                     model.Email.Trim(), model.FullName, subject, body);
@@ -308,7 +299,7 @@ namespace Nop.Web.Controllers
             if (!_commonSettings.SitemapEnabled)
                 return RedirectToRoute("HomePage");
 
-            var siteMap = _commonModelFactory.PrepareSitemapXml(this.Url, id);
+            var siteMap = _commonModelFactory.PrepareSitemapXml(id);
             return Content(siteMap, "text/xml");
         }
 
@@ -317,7 +308,7 @@ namespace Nop.Web.Controllers
             _themeContext.WorkingThemeName = themeName;
 
             //home page
-            if (String.IsNullOrEmpty(returnUrl))
+            if (string.IsNullOrEmpty(returnUrl))
                 returnUrl = Url.RouteUrl("HomePage");
 
             //prevent open redirection attack
@@ -367,7 +358,38 @@ namespace Nop.Web.Controllers
         {
             return View();
         }
-        
+
+        //helper method to redirect users. Workaround for GenericPathRoute class where we're not allowed to do it
+        public virtual IActionResult InternalRedirect(string url, bool permanentRedirect)
+        {
+            //ensure it's invoked from our GenericPathRoute class
+            if (HttpContext.Items["nop.RedirectFromGenericPathRoute"] == null ||
+                !Convert.ToBoolean(HttpContext.Items["nop.RedirectFromGenericPathRoute"]))
+            {
+                url = Url.RouteUrl("HomePage");
+                permanentRedirect = false;
+            }
+
+            //home page
+            if (string.IsNullOrEmpty(url))
+            {
+                url = Url.RouteUrl("HomePage");
+                permanentRedirect = false;
+            }
+
+            //prevent open redirection attack
+            if (!Url.IsLocalUrl(url))
+            {
+                url = Url.RouteUrl("HomePage");
+                permanentRedirect = false;
+            }
+
+            if (permanentRedirect)
+                return RedirectPermanent(url);
+
+            return Redirect(url);
+        }
+
         #endregion
     }
 }

@@ -1,6 +1,8 @@
-﻿@{
-    var defaultGridPageSize = EngineContext.Current.Resolve<Nop.Core.Domain.Common.AdminAreaSettings>().DefaultGridPageSize;
-    var gridPageSizes = EngineContext.Current.Resolve<Nop.Core.Domain.Common.AdminAreaSettings>().GridPageSizes;
+﻿@inject AdminAreaSettings adminAreaSettings
+
+@{
+    var defaultGridPageSize = adminAreaSettings.DefaultGridPageSize;
+    var gridPageSizes = adminAreaSettings.GridPageSizes;
 
     //page title
     ViewBag.Title = T("Admin.Customers.OnlineCustomers").Text;
@@ -8,13 +10,14 @@
     Html.SetActiveMenuItemSystemName("Online customers");
 }
 
-@Html.AntiForgeryToken()
+<nop-antiforgery-token />
 <div class="content-header clearfix">
     <h1 class="pull-left">
         @T("Admin.Customers.OnlineCustomers")
     </h1>
     <div class="pull-right">
         &nbsp;
+        @await Component.InvokeAsync("AdminWidget", new { widgetZone = "admin_online_customer_list_buttons" })
     </div>
 </div>
 
@@ -25,7 +28,7 @@
                 <div class="panel-body">
                     <div id="onlinecustomers-grid"></div>
 
-                    <script>
+                    <script type="text/javascript">
                         $(document).ready(function () {
                             $("#onlinecustomers-grid").kendoGrid({
                                 dataSource: {
@@ -56,7 +59,7 @@
                                 pageable: {
                                     refresh: true,
                                     pageSizes: [@(gridPageSizes)],
-                                    @Html.Partial("_GridPagerMessages")
+                                    @await Html.PartialAsync("_GridPagerMessages")
                                 },
                                 editable: {
                                     confirmation: "@T("Admin.Common.DeleteConfirmation")",

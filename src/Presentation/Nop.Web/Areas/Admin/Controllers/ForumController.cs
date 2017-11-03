@@ -1,8 +1,8 @@
 ﻿using System;
 using System.Linq;
 using Microsoft.AspNetCore.Mvc;
-using Nop.Admin.Extensions;
-using Nop.Admin.Models.Forums;
+using Nop.Web.Areas.Admin.Extensions;
+using Nop.Web.Areas.Admin.Models.Forums;
 using Nop.Services.Forums;
 using Nop.Services.Helpers;
 using Nop.Services.Localization;
@@ -10,14 +10,20 @@ using Nop.Services.Security;
 using Nop.Web.Framework.Kendoui;
 using Nop.Web.Framework.Mvc.Filters;
 
-namespace Nop.Admin.Controllers
+namespace Nop.Web.Areas.Admin.Controllers
 {
     public partial class ForumController : BaseAdminController
     {
+        #region Fields
+
         private readonly IForumService _forumService;
         private readonly IDateTimeHelper _dateTimeHelper;
         private readonly ILocalizationService _localizationService;
         private readonly IPermissionService _permissionService;
+
+        #endregion
+
+        #region Ctor
 
         public ForumController(IForumService forumService,
             IDateTimeHelper dateTimeHelper, ILocalizationService localizationService,
@@ -28,6 +34,10 @@ namespace Nop.Admin.Controllers
             this._localizationService = localizationService;
             this._permissionService = permissionService;
         }
+
+        #endregion
+
+        #region Methods
 
         #region List
 
@@ -293,6 +303,8 @@ namespace Nop.Admin.Controllers
             SuccessNotification(_localizationService.GetResource("Admin.ContentManagement.Forums.Forum.Deleted"));
             return RedirectToAction("List");
         }
+
+        #endregion
 
         #endregion
     }

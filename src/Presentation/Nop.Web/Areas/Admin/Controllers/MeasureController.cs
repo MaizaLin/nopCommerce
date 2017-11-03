@@ -1,9 +1,8 @@
-﻿#if NET451
-using System;
+﻿using System;
 using System.Linq;
-using System.Web.Mvc;
-using Nop.Admin.Extensions;
-using Nop.Admin.Models.Directory;
+using Microsoft.AspNetCore.Mvc;
+using Nop.Web.Areas.Admin.Extensions;
+using Nop.Web.Areas.Admin.Models.Directory;
 using Nop.Core.Domain.Directory;
 using Nop.Services.Configuration;
 using Nop.Services.Directory;
@@ -13,7 +12,7 @@ using Nop.Services.Security;
 using Nop.Web.Framework.Kendoui;
 using Nop.Web.Framework.Mvc;
 
-namespace Nop.Admin.Controllers
+namespace Nop.Web.Areas.Admin.Controllers
 {
     public partial class MeasureController : BaseAdminController
 	{
@@ -28,7 +27,7 @@ namespace Nop.Admin.Controllers
 
         #endregion
 
-        #region Constructors
+        #region Ctor
 
         public MeasureController(IMeasureService measureService,
             MeasureSettings measureSettings, ISettingService settingService,
@@ -56,7 +55,6 @@ namespace Nop.Admin.Controllers
         }
 
         #region Weights
-
 
         [HttpPost]
         public virtual IActionResult Weights(DataSourceRequest command)
@@ -100,7 +98,7 @@ namespace Nop.Admin.Controllers
         }
         
         [HttpPost]
-        public virtual IActionResult WeightAdd([Bind(Exclude="Id")] MeasureWeightModel model)
+        public virtual IActionResult WeightAdd(MeasureWeightModel model)
         {
             if (!_permissionService.Authorize(StandardPermissionProvider.ManageShippingSettings))
                 return AccessDeniedView();
@@ -205,7 +203,7 @@ namespace Nop.Admin.Controllers
         }
 
         [HttpPost]
-        public virtual IActionResult DimensionAdd([Bind(Exclude = "Id")] MeasureDimensionModel model)
+        public virtual IActionResult DimensionAdd(MeasureDimensionModel model)
         {
             if (!_permissionService.Authorize(StandardPermissionProvider.ManageShippingSettings))
                 return AccessDeniedView();
@@ -269,4 +267,3 @@ namespace Nop.Admin.Controllers
         #endregion
     }
 }
-#endif

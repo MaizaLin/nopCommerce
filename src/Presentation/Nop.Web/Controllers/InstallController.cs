@@ -1,11 +1,11 @@
-﻿#if NET451
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Data.SqlClient;
 using System.Linq;
 using System.Security.Principal;
 using System.Threading;
-using System.Web.Mvc;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Rendering;
 using Nop.Core;
 using Nop.Core.Caching;
 using Nop.Core.Configuration;
@@ -20,26 +20,26 @@ using Nop.Web.Models.Install;
 
 namespace Nop.Web.Controllers
 {
-    public partial class InstallController : BasePublicController
+    public partial class InstallController : Controller
     {
-#region Fields
+        #region Fields
 
         private readonly IInstallationLocalizationService _locService;
         private readonly NopConfig _config;
-
-#endregion
-
-#region Ctor
+        
+        #endregion
+        
+        #region Ctor
 
         public InstallController(IInstallationLocalizationService locService, NopConfig config)
         {
             this._locService = locService;
             this._config = config;
         }
-
-#endregion
-
-#region Utilities
+        
+        #endregion
+        
+        #region Utilities
 
         /// <summary>
         /// A value indicating whether we use MARS (Multiple Active Result Sets)
@@ -54,7 +54,6 @@ namespace Nop.Web.Controllers
         /// </summary>
         /// <param name="connectionString">Connection string</param>
         /// <returns>Returns true if the database exists.</returns>
-        [NonAction]
         protected virtual bool SqlServerDatabaseExists(string connectionString)
         {
             try
@@ -83,7 +82,6 @@ namespace Nop.Web.Controllers
         /// Pass 0 to skip this validation.
         /// </param>
         /// <returns>Error</returns>
-        [NonAction]
         protected virtual string CreateDatabase(string connectionString, string collation, int triesToConnect = 10)
         {
             try
@@ -94,9 +92,9 @@ namespace Nop.Web.Controllers
                 //now create connection string to 'master' dabatase. It always exists.
                 builder.InitialCatalog = "master";
                 var masterCatalogConnectionString = builder.ToString();
-                string query = string.Format("CREATE DATABASE [{0}]", databaseName);
-                if (!String.IsNullOrWhiteSpace(collation))
-                    query = string.Format("{0} COLLATE {1}", query, collation);
+                var query = $"CREATE DATABASE [{databaseName}]";
+                if (!string.IsNullOrWhiteSpace(collation))
+                    query = $"{query} COLLATE {collation}";
                 using (var conn = new SqlConnection(masterCatalogConnectionString))
                 {
                     conn.Open();
@@ -143,15 +141,16 @@ namespace Nop.Web.Controllers
         /// <param name="password">The password for the SQL Server account</param>
         /// <param name="timeout">The connection timeout</param>
         /// <returns>Connection string</returns>
-        [NonAction]
         protected virtual string CreateConnectionString(bool trustedConnection,
             string serverName, string databaseName,
             string userName, string password, int timeout = 0)
         {
-            var builder = new SqlConnectionStringBuilder();
-            builder.IntegratedSecurity = trustedConnection;
-            builder.DataSource = serverName;
-            builder.InitialCatalog = databaseName;
+            var builder = new SqlConnectionStringBuilder
+            {
+                IntegratedSecurity = trustedConnection,
+                DataSource = serverName,
+                InitialCatalog = databaseName
+            };
             if (!trustedConnection)
             {
                 builder.UserID = userName;
@@ -168,19 +167,15 @@ namespace Nop.Web.Controllers
             }
             return builder.ConnectionString;
         }
-
-#endregion
-
-#region Methods
+        
+        #endregion
+        
+        #region Methods
 
         public virtual IActionResult Index()
         {
             if (DataSettingsHelper.DatabaseIsInstalled())
                 return RedirectToRoute("HomePage");
-
-            //set page timeout to 5 minutes
-            this.Server.ScriptTimeout = 300;
-
 
             var model = new InstallModel
             {
@@ -215,9 +210,6 @@ namespace Nop.Web.Controllers
         {
             if (DataSettingsHelper.DatabaseIsInstalled())
                 return RedirectToRoute("HomePage");
-
-            //set page timeout to 5 minutes
-            this.Server.ScriptTimeout = 300;
 
             if (model.DatabaseConnectionString != null)
                 model.DatabaseConnectionString = model.DatabaseConnectionString.Trim();
@@ -275,7 +267,6 @@ namespace Nop.Web.Controllers
                 }
             }
 
-
             //Consider granting access rights to the resource to the ASP.NET request identity. 
             //ASP.NET has a base process identity 
             //(typically {MACHINE}\ASPNET on IIS 5 or Network Service on IIS 6 and IIS 7, 
@@ -285,12 +276,12 @@ namespace Nop.Web.Controllers
             var webHelper = EngineContext.Current.Resolve<IWebHelper>();
             //validate permissions
             var dirsToCheck = FilePermissionHelper.GetDirectoriesWrite();
-            foreach (string dir in dirsToCheck)
+            foreach (var dir in dirsToCheck)
                 if (!FilePermissionHelper.CheckPermissions(dir, false, true, true, false))
                     ModelState.AddModelError("", string.Format(_locService.GetResource("ConfigureDirectoryPermissions"), WindowsIdentity.GetCurrent().Name, dir));
 
             var filesToCheck = FilePermissionHelper.GetFilesWrite();
-            foreach (string file in filesToCheck)
+            foreach (var file in filesToCheck)
                 if (!FilePermissionHelper.CheckPermissions(file, false, true, true, true))
                     ModelState.AddModelError("", string.Format(_locService.GetResource("ConfigureFilePermissions"), WindowsIdentity.GetCurrent().Name, file));
 
@@ -332,7 +323,7 @@ namespace Nop.Web.Controllers
                                 //create database
                                 var collation = model.UseCustomCollation ? model.Collation : "";
                                 var errorCreatingDatabase = CreateDatabase(connectionString, collation);
-                                if (!String.IsNullOrEmpty(errorCreatingDatabase))
+                                if (!string.IsNullOrEmpty(errorCreatingDatabase))
                                     throw new Exception(errorCreatingDatabase);
                             }
                         }
@@ -346,12 +337,12 @@ namespace Nop.Web.Controllers
                     else
                     {
                         //SQL CE
-                        string databaseFileName = "Nop.Db.sdf";
-                        string databasePath = @"|DataDirectory|\" + databaseFileName;
+                        var databaseFileName = "Nop.Db.sdf";
+                        var databasePath = @"|DataDirectory|\" + databaseFileName;
                         connectionString = "Data Source=" + databasePath + ";Persist Security Info=False";
 
                         //drop database if exists
-                        string databaseFullPath = CommonHelper.MapPath("~/App_Data/") + databaseFileName;
+                        var databaseFullPath = CommonHelper.MapPath("~/App_Data/") + databaseFileName;
                         if (System.IO.File.Exists(databaseFullPath))
                         {
                             System.IO.File.Delete(databaseFullPath);
@@ -371,7 +362,6 @@ namespace Nop.Web.Controllers
                     var dataProviderInstance = EngineContext.Current.Resolve<BaseDataProviderManager>().LoadDataProvider();
                     dataProviderInstance.InitDatabase();
 
-
                     //now resolve installation service
                     var installationService = EngineContext.Current.Resolve<IInstallationService>();
                     installationService.InstallData(model.AdminEmail, model.AdminPassword, model.InstallSampleData);
@@ -387,7 +377,7 @@ namespace Nop.Web.Controllers
                         .OrderBy(x => x.PluginDescriptor.Group)
                         .ThenBy(x => x.PluginDescriptor.DisplayOrder)
                         .ToList();
-                    var pluginsIgnoredDuringInstallation = String.IsNullOrEmpty(_config.PluginsIgnoredDuringInstallation) ?
+                    var pluginsIgnoredDuringInstallation = string.IsNullOrEmpty(_config.PluginsIgnoredDuringInstallation) ?
                         new List<string>() :
                         _config.PluginsIgnoredDuringInstallation
                         .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
@@ -397,6 +387,7 @@ namespace Nop.Web.Controllers
                     {
                         if (pluginsIgnoredDuringInstallation.Contains(plugin.PluginDescriptor.SystemName))
                             continue;
+
                         plugin.Install();
                     }
 
@@ -406,7 +397,7 @@ namespace Nop.Web.Controllers
                     permissionProviders.Add(typeof(StandardPermissionProvider));
                     foreach (var providerType in permissionProviders)
                     {
-                        dynamic provider = Activator.CreateInstance(providerType);
+                        var provider = (IPermissionProvider)Activator.CreateInstance(providerType);
                         EngineContext.Current.Resolve<IPermissionService>().InstallPermissions(provider);
                     }
 
@@ -420,8 +411,8 @@ namespace Nop.Web.Controllers
                 {
                     //reset cache
                     DataSettingsHelper.ResetCache();
-
-                    var cacheManager = EngineContext.Current.ContainerManager.Resolve<IStaticCacheManager>();
+                    
+                    var cacheManager = EngineContext.Current.Resolve<IStaticCacheManager>();
                     cacheManager.Clear();
 
                     //clear provider settings if something got wrong
@@ -461,8 +452,7 @@ namespace Nop.Web.Controllers
             //Redirect to home page
             return RedirectToRoute("HomePage");
         }
-
-#endregion
+        
+        #endregion
     }
 }
-#endif

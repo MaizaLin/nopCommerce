@@ -1,20 +1,21 @@
 ﻿@model ProductModel
+@inject AdminAreaSettings adminAreaSettings
 
 @{
-    var defaultGridPageSize = EngineContext.Current.Resolve<Nop.Core.Domain.Common.AdminAreaSettings>().DefaultGridPageSize;
-    var gridPageSizes = EngineContext.Current.Resolve<Nop.Core.Domain.Common.AdminAreaSettings>().GridPageSizes;
+    var defaultGridPageSize = adminAreaSettings.DefaultGridPageSize;
+    var gridPageSizes = adminAreaSettings.GridPageSizes;
 }
 
 <div class="panel-group">
     <p>
         @T("Admin.Catalog.Products.PurchasedWithOrders.Hint")
     </p>
-
+    @await Component.InvokeAsync("AdminWidget", new { widgetZone = "admin_product_details_purchased_with_orders_top", additionalData = Model.Id })
     <div class="panel panel-default">
         <div class="panel-body">
             <div id="purchased-with-orders-grid"></div>
 
-            <script>
+            <script type="text/javascript">
                 $(document).ready(function() {
                     $("#purchased-with-orders-grid").kendoGrid({
                         dataSource: {
@@ -45,7 +46,7 @@
                         pageable: {
                             refresh: true,
                             pageSizes: [@(gridPageSizes)],
-                            @Html.Partial("_GridPagerMessages")
+                            @await Html.PartialAsync("_GridPagerMessages")
                         },
                         editable: {
                             confirmation: "@T("Admin.Common.DeleteConfirmation")",
@@ -100,4 +101,5 @@
             </script>
         </div>
     </div>
+    @await Component.InvokeAsync("AdminWidget", new { widgetZone = "admin_product_details_purchased_with_orders_bottom", additionalData = Model.Id })
 </div>

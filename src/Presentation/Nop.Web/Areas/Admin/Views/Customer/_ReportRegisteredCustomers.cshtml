@@ -2,7 +2,7 @@
     <div class="panel panel-default">
         <div class="panel-body">
             <div id="registered-customers-grid"></div>
-            <script>
+            <script type="text/javascript">
                 $(document).ready(function () {
                     $("#registered-customers-grid").kendoGrid({
                         dataSource: {
@@ -34,7 +34,7 @@
                             numeric: false,
                             previousNext: false,
                             info: false,
-                            @Html.Partial("_GridPagerMessages")
+                            @await Html.PartialAsync("_GridPagerMessages")
                         },
                         editable: {
                             confirmation: "@T("Admin.Common.DeleteConfirmation")",

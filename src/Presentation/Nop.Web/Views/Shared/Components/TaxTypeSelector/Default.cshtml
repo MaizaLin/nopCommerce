@@ -6,8 +6,7 @@
 @inject IWebHelper webHelper
 @inject IHttpContextAccessor httpContextAccessor
 @{
-    var request = httpContextAccessor.HttpContext.Request;
-    var rawUrl = request.Path + request.QueryString;
+    var rawUrl = webHelper.GetRawUrl(httpContextAccessor.HttpContext.Request);
 
     var taxTypes = new List<SelectListItem>();
     taxTypes.Add(new SelectListItem
@@ -24,5 +23,5 @@
     });
 }
 <div class="tax-display-type-selector">
-    @Html.DropDownList("customerTaxType", taxTypes, new { onchange = "setLocation(this.value);" })
+    <select id="customerTaxType" name="customerTaxType" asp-items="@taxTypes" onchange="setLocation(this.value);"></select>
 </div>

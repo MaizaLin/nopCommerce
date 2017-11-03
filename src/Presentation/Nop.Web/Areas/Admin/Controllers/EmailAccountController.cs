@@ -1,8 +1,8 @@
 ﻿using System;
 using System.Linq;
 using Microsoft.AspNetCore.Mvc;
-using Nop.Admin.Extensions;
-using Nop.Admin.Models.Messages;
+using Nop.Web.Areas.Admin.Extensions;
+using Nop.Web.Areas.Admin.Models.Messages;
 using Nop.Core;
 using Nop.Core.Domain.Messages;
 using Nop.Services.Configuration;
@@ -14,10 +14,12 @@ using Nop.Web.Framework.Controllers;
 using Nop.Web.Framework.Kendoui;
 using Nop.Web.Framework.Mvc.Filters;
 
-namespace Nop.Admin.Controllers
+namespace Nop.Web.Areas.Admin.Controllers
 {
 	public partial class EmailAccountController : BaseAdminController
 	{
+	    #region Fields
+
         private readonly IEmailAccountService _emailAccountService;
         private readonly ILocalizationService _localizationService;
         private readonly ISettingService _settingService;
@@ -26,6 +28,10 @@ namespace Nop.Admin.Controllers
         private readonly EmailAccountSettings _emailAccountSettings;
         private readonly IPermissionService _permissionService;
         private readonly ICustomerActivityService _customerActivityService;
+
+        #endregion
+
+	    #region Ctor
 
         public EmailAccountController(IEmailAccountService emailAccountService,
             ILocalizationService localizationService, ISettingService settingService,
@@ -43,7 +49,11 @@ namespace Nop.Admin.Controllers
             this._customerActivityService = customerActivityService;
         }
 
-		public virtual IActionResult List()
+        #endregion
+
+	    #region Methods
+
+        public virtual IActionResult List()
         {
             if (!_permissionService.Authorize(StandardPermissionProvider.ManageEmailAccounts))
                 return AccessDeniedView();
@@ -91,10 +101,12 @@ namespace Nop.Admin.Controllers
             if (!_permissionService.Authorize(StandardPermissionProvider.ManageEmailAccounts))
                 return AccessDeniedView();
 
-            var model = new EmailAccountModel();
-            //default values
-            model.Port = 25;
-			return View(model);
+            var model = new EmailAccountModel
+            {
+                //default values
+                Port = 25
+            };
+            return View(model);
 		}
 
         [HttpPost, ParameterBasedOnFormName("save-continue", "continueEditing")]
@@ -201,11 +213,11 @@ namespace Nop.Admin.Controllers
 
             try
             {
-                if (String.IsNullOrWhiteSpace(model.SendTestEmailTo))
+                if (string.IsNullOrWhiteSpace(model.SendTestEmailTo))
                     throw new NopException("Enter test email address");
 
-                string subject = _storeContext.CurrentStore.Name + ". Testing email functionality.";
-                string body = "Email works fine.";
+                var subject = _storeContext.CurrentStore.Name + ". Testing email functionality.";
+                var body = "Email works fine.";
                 _emailSender.SendEmail(emailAccount, subject, body, emailAccount.Email, emailAccount.DisplayName, model.SendTestEmailTo, null);
                 SuccessNotification(_localizationService.GetResource("Admin.Configuration.EmailAccounts.SendTestEmail.Success"), false);
             }
@@ -246,5 +258,7 @@ namespace Nop.Admin.Controllers
 	            return RedirectToAction("Edit", new {id = emailAccount.Id});
 	        }
 	    }
-	}
+
+	    #endregion
+    }
 }

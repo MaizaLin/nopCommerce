@@ -30,7 +30,7 @@
     <div class="box-body">
         <div id="search-term-report-grid"></div>
 
-        <script>
+        <script type="text/javascript">
             $(document).ready(function () {
                 $('#@panelId').on('click', 'button[data-widget="collapse"]', function () {
                     var collapsed = !$('#@panelId').hasClass('collapsed-box');
@@ -65,7 +65,7 @@
                     },
                     pageable: {
                         refresh: true,
-                        @Html.Partial("_GridPagerMessages")
+                        @await Html.PartialAsync("_GridPagerMessages")
                     },
                     editable: {
                         confirmation: "@T("Admin.Common.DeleteConfirmation")",

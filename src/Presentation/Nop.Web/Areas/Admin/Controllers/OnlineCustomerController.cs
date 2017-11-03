@@ -1,8 +1,7 @@
-﻿#if NET451
-using System;
+﻿using System;
 using System.Linq;
-using System.Web.Mvc;
-using Nop.Admin.Models.Customers;
+using Microsoft.AspNetCore.Mvc;
+using Nop.Web.Areas.Admin.Models.Customers;
 using Nop.Core.Domain.Customers;
 using Nop.Services.Common;
 using Nop.Services.Customers;
@@ -12,7 +11,7 @@ using Nop.Services.Localization;
 using Nop.Services.Security;
 using Nop.Web.Framework.Kendoui;
 
-namespace Nop.Admin.Controllers
+namespace Nop.Web.Areas.Admin.Controllers
 {
     public partial class OnlineCustomerController : BaseAdminController
     {
@@ -27,7 +26,7 @@ namespace Nop.Admin.Controllers
 
         #endregion
 
-        #region Constructors
+        #region Ctor
 
         public OnlineCustomerController(ICustomerService customerService,
             IGeoLookupService geoLookupService, IDateTimeHelper dateTimeHelper,
@@ -68,7 +67,9 @@ namespace Nop.Admin.Controllers
                 {
                     Id = x.Id,
                     CustomerInfo = x.IsRegistered() ? x.Email : _localizationService.GetResource("Admin.Customers.Guest"),
-                    LastIpAddress = x.LastIpAddress,
+                    LastIpAddress = _customerSettings.StoreIpAddresses ?
+                        x.LastIpAddress :
+                        _localizationService.GetResource("Admin.Customers.OnlineCustomers.Fields.IPAddress.Disabled"),
                     Location = _geoLookupService.LookupCountryName(x.LastIpAddress),
                     LastActivityDate = _dateTimeHelper.ConvertToUserTime(x.LastActivityDateUtc, DateTimeKind.Utc),
                     LastVisitedPage = _customerSettings.StoreLastVisitedPage ?
@@ -84,4 +85,3 @@ namespace Nop.Admin.Controllers
         #endregion
     }
 }
-#endif

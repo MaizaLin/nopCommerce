@@ -1,10 +1,11 @@
-﻿#if NET451
-using System;
+﻿using System;
 using System.Linq;
 using System.Text;
-using System.Web.Mvc;
-using Nop.Admin.Extensions;
-using Nop.Admin.Models.Messages;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Rendering;
+using Nop.Web.Areas.Admin.Extensions;
+using Nop.Web.Areas.Admin.Models.Messages;
 using Nop.Core;
 using Nop.Services.Customers;
 using Nop.Services.ExportImport;
@@ -17,11 +18,13 @@ using Nop.Web.Framework.Controllers;
 using Nop.Web.Framework.Kendoui;
 using Nop.Web.Framework.Mvc;
 
-namespace Nop.Admin.Controllers
+namespace Nop.Web.Areas.Admin.Controllers
 {
 	public partial class NewsLetterSubscriptionController : BaseAdminController
 	{
-		private readonly INewsLetterSubscriptionService _newsLetterSubscriptionService;
+	    #region Fields
+
+        private readonly INewsLetterSubscriptionService _newsLetterSubscriptionService;
 		private readonly IDateTimeHelper _dateTimeHelper;
         private readonly ILocalizationService _localizationService;
         private readonly IPermissionService _permissionService;
@@ -30,7 +33,11 @@ namespace Nop.Admin.Controllers
         private readonly IExportManager _exportManager;
         private readonly IImportManager _importManager;
 
-		public NewsLetterSubscriptionController(INewsLetterSubscriptionService newsLetterSubscriptionService,
+        #endregion
+
+	    #region Ctor
+
+        public NewsLetterSubscriptionController(INewsLetterSubscriptionService newsLetterSubscriptionService,
 			IDateTimeHelper dateTimeHelper,
             ILocalizationService localizationService,
             IPermissionService permissionService,
@@ -49,7 +56,11 @@ namespace Nop.Admin.Controllers
             this._importManager = importManager;
 		}
 
-		public virtual IActionResult Index()
+        #endregion
+
+	    #region Methods
+
+        public virtual IActionResult Index()
 		{
 			return RedirectToAction("List");
 		}
@@ -119,7 +130,7 @@ namespace Nop.Admin.Controllers
 					var m = x.ToModel();
 				    var store = _storeService.GetStoreById(x.StoreId);
 				    m.StoreName = store != null ? store.Name : "Unknown store";
-					m.CreatedOn = _dateTimeHelper.ConvertToUserTime(x.CreatedOnUtc, DateTimeKind.Utc);
+					m.CreatedOn = _dateTimeHelper.ConvertToUserTime(x.CreatedOnUtc, DateTimeKind.Utc).ToLongTimeString();
 					return m;
 				}),
                 Total = newsletterSubscriptions.TotalCount
@@ -129,7 +140,7 @@ namespace Nop.Admin.Controllers
 		}
 
         [HttpPost]
-        public virtual IActionResult SubscriptionUpdate([Bind(Exclude = "CreatedOn")] NewsLetterSubscriptionModel model)
+        public virtual IActionResult SubscriptionUpdate(NewsLetterSubscriptionModel model)
         {
             if (!_permissionService.Authorize(StandardPermissionProvider.ManageNewsletterSubscribers))
                 return AccessDeniedView();
@@ -182,25 +193,24 @@ namespace Nop.Admin.Controllers
             var subscriptions = _newsLetterSubscriptionService.GetAllNewsLetterSubscriptions(model.SearchEmail,
                 startDateValue, endDateValue, model.StoreId, isActive, model.CustomerRoleId);
 
-		    string result = _exportManager.ExportNewsletterSubscribersToTxt(subscriptions);
+		    var result = _exportManager.ExportNewsletterSubscribersToTxt(subscriptions);
 
-            string fileName = String.Format("newsletter_emails_{0}_{1}.txt", DateTime.Now.ToString("yyyy-MM-dd-HH-mm-ss"), CommonHelper.GenerateRandomDigitCode(4));
+            var fileName = $"newsletter_emails_{DateTime.Now:yyyy-MM-dd-HH-mm-ss}_{CommonHelper.GenerateRandomDigitCode(4)}.txt";
 			return File(Encoding.UTF8.GetBytes(result), MimeTypes.TextCsv, fileName);
 		}
 
         [HttpPost]
-        public virtual IActionResult ImportCsv(IFormCollection form)
+        public virtual IActionResult ImportCsv(IFormFile importcsvfile)
         {
             if (!_permissionService.Authorize(StandardPermissionProvider.ManageNewsletterSubscribers))
                 return AccessDeniedView();
 
             try
             {
-                var file = Request.Files["importcsvfile"];
-                if (file != null && file.ContentLength > 0)
+                if (importcsvfile != null && importcsvfile.Length > 0)
                 {
-                    int count = _importManager.ImportNewsletterSubscribersFromTxt(file.InputStream);
-                    SuccessNotification(String.Format(_localizationService.GetResource("Admin.Promotions.NewsLetterSubscriptions.ImportEmailsSuccess"), count));
+                    var count = _importManager.ImportNewsletterSubscribersFromTxt(importcsvfile.OpenReadStream());
+                    SuccessNotification(string.Format(_localizationService.GetResource("Admin.Promotions.NewsLetterSubscriptions.ImportEmailsSuccess"), count));
                     return RedirectToAction("List");
                 }
                 ErrorNotification(_localizationService.GetResource("Admin.Common.UploadFile"));
@@ -212,6 +222,7 @@ namespace Nop.Admin.Controllers
                 return RedirectToAction("List");
             }
         }
-	}
+
+	    #endregion
+    }
 }
-#endif

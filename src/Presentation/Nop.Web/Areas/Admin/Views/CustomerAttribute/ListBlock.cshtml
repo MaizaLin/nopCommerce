@@ -8,7 +8,7 @@
         </p>
         <div id="customerattributes-grid"></div>
 
-        <script>
+        <script type="text/javascript">
                 $(document).ready(function () {
                     $("#customerattributes-grid").kendoGrid({
                         dataSource: {
@@ -40,7 +40,7 @@
                             numeric: false,
                             previousNext: false,
                             info: false,
-                            @Html.Partial("_GridPagerMessages")
+                            @await Html.PartialAsync("_GridPagerMessages")
                         },
                         editable: {
                             confirmation: "@T("Admin.Common.DeleteConfirmation")",

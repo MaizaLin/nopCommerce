@@ -3,7 +3,6 @@ using Nop.Core.Domain.Catalog;
 using Nop.Core.Domain.Configuration;
 using Nop.Core.Domain.Discounts;
 using Nop.Core.Events;
-using Nop.Core.Infrastructure;
 using Nop.Services.Events;
 
 namespace Nop.Services.Discounts.Cache
@@ -75,6 +74,10 @@ namespace Nop.Services.Discounts.Cache
 
         private readonly IStaticCacheManager _cacheManager;
 
+        /// <summary>
+        /// Ctor
+        /// </summary>
+        /// <param name="cacheManager">Cache manager</param>
         public DiscountEventConsumer(IStaticCacheManager cacheManager)
         {
             this._cacheManager = cacheManager;
@@ -153,6 +156,5 @@ namespace Nop.Services.Discounts.Cache
         {
             _cacheManager.RemoveByPattern(DISCOUNT_MANUFACTURER_IDS_PATTERN_KEY);
         }
-
     }
 }

@@ -1,19 +1,19 @@
-﻿#if NET451
-using System;
+﻿using System;
 using System.Linq;
-using System.Web.Mvc;
-using Nop.Admin.Extensions;
-using Nop.Admin.Models.Polls;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Rendering;
+using Nop.Web.Areas.Admin.Extensions;
+using Nop.Web.Areas.Admin.Models.Polls;
 using Nop.Core.Domain.Polls;
 using Nop.Services.Helpers;
 using Nop.Services.Localization;
 using Nop.Services.Polls;
 using Nop.Services.Security;
-using Nop.Web.Framework.Controllers;
 using Nop.Web.Framework.Kendoui;
 using Nop.Web.Framework.Mvc;
+using Nop.Web.Framework.Mvc.Filters;
 
-namespace Nop.Admin.Controllers
+namespace Nop.Web.Areas.Admin.Controllers
 {
     public partial class PollController : BaseAdminController
 	{
@@ -27,7 +27,7 @@ namespace Nop.Admin.Controllers
 
 		#endregion
 
-		#region Constructors
+		#region Ctor
 
         public PollController(IPollService pollService, ILanguageService languageService,
             IDateTimeHelper dateTimeHelper, ILocalizationService localizationService,
@@ -44,11 +44,10 @@ namespace Nop.Admin.Controllers
 
         #region Utilities
 
-        [NonAction]
         protected virtual void PrepareLanguagesModel(PollModel model)
         {
             if (model == null)
-                throw new ArgumentNullException("model");
+                throw new ArgumentNullException(nameof(model));
 
             var languages = _languageService.GetAllLanguages(true);
             foreach (var language in languages)
@@ -94,7 +93,7 @@ namespace Nop.Admin.Controllers
                         m.StartDate = _dateTimeHelper.ConvertToUserTime(x.StartDateUtc.Value, DateTimeKind.Utc);
                     if (x.EndDateUtc.HasValue)
                         m.EndDate = _dateTimeHelper.ConvertToUserTime(x.EndDateUtc.Value, DateTimeKind.Utc);
-                    m.LanguageName = x.Language.Name;
+                    m.LanguageName = _languageService.GetLanguageById(x.LanguageId)?.Name;
                     return m;
                 }),
                 Total = polls.TotalCount
@@ -140,7 +139,6 @@ namespace Nop.Admin.Controllers
                     return RedirectToAction("Edit", new { id = poll.Id });
                 }
                 return RedirectToAction("List");
-
             }
 
             //If we got this far, something failed, redisplay form
@@ -249,8 +247,7 @@ namespace Nop.Admin.Controllers
 
             return Json(gridModel);
         }
-
-
+        
         [HttpPost]
         public virtual IActionResult PollAnswerUpdate(PollAnswerModel model)
         {
@@ -274,7 +271,7 @@ namespace Nop.Admin.Controllers
         }
 
         [HttpPost]
-        public virtual IActionResult PollAnswerAdd(int pollId, [Bind(Exclude = "Id")] PollAnswerModel model)
+        public virtual IActionResult PollAnswerAdd(int pollId, PollAnswerModel model)
         {
             if (!_permissionService.Authorize(StandardPermissionProvider.ManagePolls))
                 return AccessDeniedView();
@@ -297,8 +294,7 @@ namespace Nop.Admin.Controllers
 
             return new NullJsonResult();
         }
-
-
+        
         [HttpPost]
         public virtual IActionResult PollAnswerDelete(int id)
         {
@@ -318,4 +314,3 @@ namespace Nop.Admin.Controllers
         #endregion
     }
 }
-#endif

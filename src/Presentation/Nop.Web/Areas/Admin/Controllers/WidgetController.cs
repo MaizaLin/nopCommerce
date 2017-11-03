@@ -1,19 +1,17 @@
-﻿#if NET451
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
-using System.Web.Mvc;
-using System.Web.Routing;
-using Nop.Admin.Extensions;
-using Nop.Admin.Models.Cms;
+using Microsoft.AspNetCore.Mvc;
 using Nop.Core.Domain.Cms;
 using Nop.Core.Plugins;
 using Nop.Services.Cms;
 using Nop.Services.Configuration;
 using Nop.Services.Security;
+using Nop.Web.Areas.Admin.Extensions;
+using Nop.Web.Areas.Admin.Models.Cms;
 using Nop.Web.Framework.Kendoui;
 using Nop.Web.Framework.Mvc;
 
-namespace Nop.Admin.Controllers
+namespace Nop.Web.Areas.Admin.Controllers
 {
     public partial class WidgetController : BaseAdminController
 	{
@@ -71,6 +69,7 @@ namespace Nop.Admin.Controllers
             {
                 var tmp1 = widget.ToModel();
                 tmp1.IsActive = widget.IsWidgetActive(_widgetSettings);
+                tmp1.ConfigurationUrl = widget.GetConfigurationPageUrl();
                 widgetsModel.Add(tmp1);
             }
             widgetsModel = widgetsModel.ToList();
@@ -84,7 +83,7 @@ namespace Nop.Admin.Controllers
         }
 
         [HttpPost]
-        public virtual IActionResult WidgetUpdate([Bind(Exclude = "ConfigurationRouteValues")] WidgetModel model)
+        public virtual IActionResult WidgetUpdate(WidgetModel model)
         {
             if (!_permissionService.Authorize(StandardPermissionProvider.ManageWidgets))
                 return AccessDeniedView();
@@ -108,62 +107,21 @@ namespace Nop.Admin.Controllers
                     _settingService.SaveSetting(_widgetSettings);
                 }
             }
+
             var pluginDescriptor = widget.PluginDescriptor;
+
             //display order
             pluginDescriptor.DisplayOrder = model.DisplayOrder;
-            PluginFileParser.SavePluginDescriptionFile(pluginDescriptor);
+
+            //update the description file
+            PluginManager.SavePluginDescriptor(pluginDescriptor);
+
             //reset plugin cache
             _pluginFinder.ReloadPlugins();
 
             return new NullJsonResult();
         }
         
-        public virtual IActionResult ConfigureWidget(string systemName)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManageWidgets))
-                return AccessDeniedView();
-
-            var widget = _widgetService.LoadWidgetBySystemName(systemName);
-            if (widget == null)
-                //No widget found with the specified id
-                return RedirectToAction("List");
-
-            var model = widget.ToModel();
-            string actionName, controllerName;
-            RouteValueDictionary routeValues;
-            widget.GetConfigurationRoute(out actionName, out controllerName, out routeValues);
-            model.ConfigurationActionName = actionName;
-            model.ConfigurationControllerName = controllerName;
-            model.ConfigurationRouteValues = routeValues;
-            return View(model);
-        }
-
-        [ChildActionOnly]
-        public virtual IActionResult WidgetsByZone(string widgetZone)
-        {
-            //model
-            var model = new List<RenderWidgetModel>();
-
-            var widgets = _widgetService.LoadActiveWidgetsByWidgetZone(widgetZone);
-            foreach (var widget in widgets)
-            {
-                var widgetModel = new RenderWidgetModel();
-
-                string actionName;
-                string controllerName;
-                RouteValueDictionary routeValues;
-                widget.GetDisplayWidgetRoute(widgetZone, out actionName, out controllerName, out routeValues);
-                widgetModel.ActionName = actionName;
-                widgetModel.ControllerName = controllerName;
-                widgetModel.RouteValues = routeValues;
-
-                model.Add(widgetModel);
-            }
-
-            return PartialView(model);
-        }
-
-        #endregion
+	    #endregion
     }
 }
-#endif

@@ -1,16 +1,15 @@
-﻿using System;
+﻿using System.ComponentModel.DataAnnotations;
 using FluentValidation.Attributes;
-using Nop.Admin.Validators.Messages;
-using Nop.Web.Framework;
-using Nop.Web.Framework.Mvc;
+using Nop.Web.Areas.Admin.Validators.Messages;
 using Nop.Web.Framework.Mvc.ModelBinding;
 using Nop.Web.Framework.Mvc.Models;
 
-namespace Nop.Admin.Models.Messages
+namespace Nop.Web.Areas.Admin.Models.Messages
 {
     [Validator(typeof(NewsLetterSubscriptionValidator))]
     public partial class NewsLetterSubscriptionModel : BaseNopEntityModel
     {
+        [DataType(DataType.EmailAddress)]
         [NopResourceDisplayName("Admin.Promotions.NewsLetterSubscriptions.Fields.Email")]
         public string Email { get; set; }
 
@@ -21,6 +20,6 @@ namespace Nop.Admin.Models.Messages
         public string StoreName { get; set; }
 
         [NopResourceDisplayName("Admin.Promotions.NewsLetterSubscriptions.Fields.CreatedOn")]
-        public DateTime CreatedOn { get; set; }
+        public string CreatedOn { get; set; }
     }
 }

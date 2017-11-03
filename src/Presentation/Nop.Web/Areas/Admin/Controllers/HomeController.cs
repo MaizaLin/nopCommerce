@@ -1,10 +1,10 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using Nop.Admin.Models.Home;
+using Nop.Web.Areas.Admin.Models.Home;
 using Nop.Core;
 using Nop.Core.Domain.Common;
 using Nop.Services.Configuration;
 
-namespace Nop.Admin.Controllers
+namespace Nop.Web.Areas.Admin.Controllers
 {
     public partial class HomeController : BaseAdminController
     {
@@ -34,19 +34,21 @@ namespace Nop.Admin.Controllers
 
         public virtual IActionResult Index()
         {
-            var model = new DashboardModel();
-            model.IsLoggedInAsVendor = _workContext.CurrentVendor != null;
+            var model = new DashboardModel
+            {
+                IsLoggedInAsVendor = _workContext.CurrentVendor != null
+            };
             return View(model);
         }
-#if NET451
+
         [HttpPost]
         public virtual IActionResult NopCommerceNewsHideAdv()
         {
             _adminAreaSettings.HideAdvertisementsOnAdminArea = !_adminAreaSettings.HideAdvertisementsOnAdminArea;
             _settingService.SaveSetting(_adminAreaSettings);
+
             return Content("Setting changed");
         }
-#endif
 
         #endregion
     }

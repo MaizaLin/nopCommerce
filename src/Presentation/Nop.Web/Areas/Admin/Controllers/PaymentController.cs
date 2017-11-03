@@ -1,11 +1,9 @@
-﻿#if NET451
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Web.Mvc;
-using System.Web.Routing;
-using Nop.Admin.Extensions;
-using Nop.Admin.Models.Payments;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Primitives;
 using Nop.Core;
 using Nop.Core.Domain.Payments;
 using Nop.Core.Plugins;
@@ -14,23 +12,26 @@ using Nop.Services.Directory;
 using Nop.Services.Localization;
 using Nop.Services.Payments;
 using Nop.Services.Security;
+using Nop.Web.Areas.Admin.Extensions;
+using Nop.Web.Areas.Admin.Models.Payments;
 using Nop.Web.Framework.Kendoui;
 using Nop.Web.Framework.Mvc;
 
-namespace Nop.Admin.Controllers
+namespace Nop.Web.Areas.Admin.Controllers
 {
     public partial class PaymentController : BaseAdminController
-	{
-		#region Fields
+    {
+        #region Fields
 
         private readonly IPaymentService _paymentService;
         private readonly PaymentSettings _paymentSettings;
         private readonly ISettingService _settingService;
         private readonly IPermissionService _permissionService;
-	    private readonly ICountryService _countryService;
+        private readonly ICountryService _countryService;
         private readonly IPluginFinder _pluginFinder;
-	    private readonly IWebHelper _webHelper;
-	    private readonly ILocalizationService _localizationService;
+        private readonly IWebHelper _webHelper;
+        private readonly ILocalizationService _localizationService;
+        private readonly IWorkContext _workContext;
 
         #endregion
 
@@ -38,13 +39,14 @@ namespace Nop.Admin.Controllers
 
         public PaymentController(IPaymentService paymentService,
             PaymentSettings paymentSettings,
-            ISettingService settingService, 
+            ISettingService settingService,
             IPermissionService permissionService,
             ICountryService countryService,
             IPluginFinder pluginFinder,
             IWebHelper webHelper,
-            ILocalizationService localizationService)
-		{
+            ILocalizationService localizationService,
+            IWorkContext workContext)
+        {
             this._paymentService = paymentService;
             this._paymentSettings = paymentSettings;
             this._settingService = settingService;
@@ -53,9 +55,10 @@ namespace Nop.Admin.Controllers
             this._pluginFinder = pluginFinder;
             this._webHelper = webHelper;
             this._localizationService = localizationService;
+            this._workContext = workContext;
         }
 
-		#endregion 
+        #endregion
 
         #region Methods
 
@@ -80,6 +83,8 @@ namespace Nop.Admin.Controllers
                 var tmp1 = paymentMethod.ToModel();
                 tmp1.IsActive = paymentMethod.IsPaymentMethodActive(_paymentSettings);
                 tmp1.LogoUrl = paymentMethod.PluginDescriptor.GetLogoUrl(_webHelper);
+                tmp1.ConfigurationUrl = paymentMethod.GetConfigurationPageUrl();
+                tmp1.RecurringPaymentType = paymentMethod.RecurringPaymentType.GetLocalizedEnum(_localizationService, _workContext);
                 paymentMethodsModel.Add(tmp1);
             }
             paymentMethodsModel = paymentMethodsModel.ToList();
@@ -93,7 +98,7 @@ namespace Nop.Admin.Controllers
         }
 
         [HttpPost]
-        public virtual IActionResult MethodUpdate([Bind(Exclude = "ConfigurationRouteValues")] PaymentMethodModel model)
+        public virtual IActionResult MethodUpdate(PaymentMethodModel model)
         {
             if (!_permissionService.Authorize(StandardPermissionProvider.ManagePaymentMethods))
                 return AccessDeniedView();
@@ -120,31 +125,14 @@ namespace Nop.Admin.Controllers
             var pluginDescriptor = pm.PluginDescriptor;
             pluginDescriptor.FriendlyName = model.FriendlyName;
             pluginDescriptor.DisplayOrder = model.DisplayOrder;
-            PluginFileParser.SavePluginDescriptionFile(pluginDescriptor);
+
+            //update the description file
+            PluginManager.SavePluginDescriptor(pluginDescriptor);
+
             //reset plugin cache
             _pluginFinder.ReloadPlugins();
 
             return new NullJsonResult();
-        }
-
-        public virtual IActionResult ConfigureMethod(string systemName)
-        {
-            if (!_permissionService.Authorize(StandardPermissionProvider.ManagePaymentMethods))
-                return AccessDeniedView();
-
-            var pm = _paymentService.LoadPaymentMethodBySystemName(systemName);
-            if (pm == null)
-                //No payment method found with the specified id
-                return RedirectToAction("Methods");
-
-            var model = pm.ToModel();
-            string actionName, controllerName;
-            RouteValueDictionary routeValues;
-            pm.GetConfigurationRoute(out actionName, out controllerName, out routeValues);
-            model.ConfigurationActionName = actionName;
-            model.ConfigurationControllerName = controllerName;
-            model.ConfigurationRouteValues = routeValues;
-            return View(model);
         }
 
         public virtual IActionResult MethodRestrictions()
@@ -169,7 +157,7 @@ namespace Nop.Admin.Controllers
                 var restictedCountries = _paymentService.GetRestictedCountryIds(pm);
                 foreach (var c in countries)
                 {
-                    bool resticted = restictedCountries.Contains(c.Id);
+                    var resticted = restictedCountries.Contains(c.Id);
                     if (!model.Resticted.ContainsKey(pm.PluginDescriptor.SystemName))
                         model.Resticted[pm.PluginDescriptor.SystemName] = new Dictionary<int, bool>();
                     model.Resticted[pm.PluginDescriptor.SystemName][c.Id] = resticted;
@@ -190,8 +178,10 @@ namespace Nop.Admin.Controllers
 
             foreach (var pm in paymentMethods)
             {
-                string formKey = "restrict_" + pm.PluginDescriptor.SystemName;
-                var countryIdsToRestrict = (form[formKey] != null ? form[formKey].Split(new [] { ',' }, StringSplitOptions.RemoveEmptyEntries).ToList() : new List<string>())
+                var formKey = "restrict_" + pm.PluginDescriptor.SystemName;
+                var countryIdsToRestrict = (!StringValues.IsNullOrEmpty(form[formKey])
+                        ? form[formKey].ToString().Split(new[] {','}, StringSplitOptions.RemoveEmptyEntries).ToList()
+                        : new List<string>())
                     .Select(x => Convert.ToInt32(x)).ToList();
 
                 var newCountryIds = new List<int>();
@@ -205,11 +195,11 @@ namespace Nop.Admin.Controllers
                 _paymentService.SaveRestictedCountryIds(pm, newCountryIds);
             }
 
-            SuccessNotification(_localizationService.GetResource("Admin.Configuration.Payment.MethodRestrictions.Updated"));
+            SuccessNotification(
+                _localizationService.GetResource("Admin.Configuration.Payment.MethodRestrictions.Updated"));
             return RedirectToAction("MethodRestrictions");
         }
 
         #endregion
     }
 }
-#endif

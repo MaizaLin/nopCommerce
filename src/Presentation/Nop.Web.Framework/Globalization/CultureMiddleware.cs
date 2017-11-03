@@ -20,6 +20,10 @@ namespace Nop.Web.Framework.Globalization
 
         #region Ctor
 
+        /// <summary>
+        /// Ctor
+        /// </summary>
+        /// <param name="next">Next</param>
         public CultureMiddleware(RequestDelegate next)
         {
             _next = next;
@@ -39,17 +43,15 @@ namespace Nop.Web.Framework.Globalization
             if (!DataSettingsHelper.DatabaseIsInstalled())
                 return;
 
-            //keep alive page requested (we ignore it to prevent creation of guest customer records)
-            var keepAliveUrl = string.Format("{0}keepalive/index", webHelper.GetStoreLocation());
-            if (webHelper.GetThisPageUrl(false).StartsWith(keepAliveUrl, StringComparison.InvariantCultureIgnoreCase))
-                return;
-
-            var adminAreaUrl = string.Format("{0}admin", webHelper.GetStoreLocation());
+            var adminAreaUrl = $"{webHelper.GetStoreLocation()}admin";
             if (webHelper.GetThisPageUrl(false).StartsWith(adminAreaUrl, StringComparison.InvariantCultureIgnoreCase))
             {
                 //we set culture of admin area to 'en-US' because current implementation of Telerik grid doesn't work well in other cultures
                 //e.g., editing decimal value in russian culture
                 CommonHelper.SetTelerikCulture();
+
+                //set work context to admin mode
+                workContext.IsAdmin = true;
             }
             else
             {

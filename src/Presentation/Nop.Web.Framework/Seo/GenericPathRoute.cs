@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.Routing.Template;
 using Nop.Core;
 using Nop.Core.Data;
+using Nop.Core.Domain.Localization;
 using Nop.Core.Infrastructure;
 using Nop.Services.Events;
 using Nop.Services.Seo;
@@ -25,6 +27,16 @@ namespace Nop.Web.Framework.Seo
 
         #region Ctor
 
+        /// <summary>
+        /// Ctor
+        /// </summary>
+        /// <param name="target">Target</param>
+        /// <param name="routeName">Route name</param>
+        /// <param name="routeTemplate">Route remplate</param>
+        /// <param name="defaults">Defaults</param>
+        /// <param name="constraints">Constraints</param>
+        /// <param name="dataTokens">Data tokens</param>
+        /// <param name="inlineConstraintResolver">Inline constraint resolver</param>
         public GenericPathRoute(IRouter target, string routeName, string routeTemplate, RouteValueDictionary defaults, 
             IDictionary<string, object> constraints, RouteValueDictionary dataTokens, IInlineConstraintResolver inlineConstraintResolver)
             : base(target, routeName, routeTemplate, defaults, constraints, dataTokens, inlineConstraintResolver)
@@ -34,8 +46,34 @@ namespace Nop.Web.Framework.Seo
 
         #endregion
 
+        #region Utilities
+
+        /// <summary>
+        /// Get route values for current route
+        /// </summary>
+        /// <param name="context">Route context</param>
+        /// <returns>Route values</returns>
+        protected RouteValueDictionary GetRouteValues(RouteContext context)
+        {
+            //remove language code from the path if it's localized URL
+            var path = context.HttpContext.Request.Path.Value;
+            if (this.SeoFriendlyUrlsForLanguagesEnabled && path.IsLocalizedUrl(context.HttpContext.Request.PathBase, false, out Language _))
+                path = path.RemoveLanguageSeoCodeFromUrl(context.HttpContext.Request.PathBase, false);
+
+            //parse route data
+            var routeValues = new RouteValueDictionary(this.ParsedTemplate.Parameters
+                .Where(parameter => parameter.DefaultValue != null)
+                .ToDictionary(parameter => parameter.Name, parameter => parameter.DefaultValue));
+            var matcher = new TemplateMatcher(this.ParsedTemplate, routeValues);
+            matcher.TryMatch(path, routeValues);
+
+            return routeValues;
+        }
+
+        #endregion
+
         #region Methods
-        
+
         /// <summary>
         /// Route request to the particular action
         /// </summary>
@@ -44,80 +82,67 @@ namespace Nop.Web.Framework.Seo
         public override Task RouteAsync(RouteContext context)
         {
             if (!DataSettingsHelper.DatabaseIsInstalled())
-            {
                 return Task.CompletedTask;
-            }
 
-            //get current route data
+            //try to get slug from the route data
+            var routeValues = GetRouteValues(context);
+            if (!routeValues.TryGetValue("GenericSeName", out object slugValue) || string.IsNullOrEmpty(slugValue as string))
+                return Task.CompletedTask;
+
+            var slug = slugValue as string;
+
+            //performance optimization, we load a cached verion here. It reduces number of SQL requests for each page load
             var urlRecordService = EngineContext.Current.Resolve<IUrlRecordService>();
-
-            //get slug from path
-            var currentRouteData = new RouteData(context.RouteData);
-#if NET451
-            var slug = currentRouteData.Values["generic_se_name"] as string;
-#else
-            //temporary solution until we can get currentRouteData.Values
-            string path = context.HttpContext.Request.Path.Value;
-            if (!string.IsNullOrEmpty(path) && path[0] == '/')
-                path = path.Substring(1);
-            var pathParts = path.Split('/');
-            var slug = pathParts.Length > 1 ? pathParts[0] : path;
-#endif
-
-            //performance optimization
-            //we load a cached verion here. It reduces number of SQL requests for each page load
             var urlRecord = urlRecordService.GetBySlugCached(slug);
-
             //comment the line above and uncomment the line below in order to disable this performance "workaround"
             //var urlRecord = urlRecordService.GetBySlug(slug);
 
+            //no URL record found
             if (urlRecord == null)
-            {
-                //no URL record found
-                currentRouteData.Values["controller"] = "Common";
-                currentRouteData.Values["action"] = "PageNotFound";
-                context.RouteData = currentRouteData;
+                return Task.CompletedTask;
 
-                //route request
+            //virtual directory path
+            var pathBase = context.HttpContext.Request.PathBase;
+
+            //if URL record is not active let's find the latest one
+            if (!urlRecord.IsActive)
+            {
+                var activeSlug = urlRecordService.GetActiveSlug(urlRecord.EntityId, urlRecord.EntityName, urlRecord.LanguageId);
+                if (string.IsNullOrEmpty(activeSlug))
+                    return Task.CompletedTask;
+
+                //redirect to active slug if found
+                var redirectionRouteData = new RouteData(context.RouteData);
+                redirectionRouteData.Values["controller"] = "Common";
+                redirectionRouteData.Values["action"] = "InternalRedirect";
+                redirectionRouteData.Values["url"] = $"{pathBase}/{activeSlug}{context.HttpContext.Request.QueryString}";
+                redirectionRouteData.Values["permanentRedirect"] = true;
+                context.HttpContext.Items["nop.RedirectFromGenericPathRoute"] = true;
+                context.RouteData = redirectionRouteData;
                 return _target.RouteAsync(context);
             }
 
-            if (!urlRecord.IsActive)
-            {
-                //URL record is not active. let's find the latest one
-                var activeSlug = urlRecordService.GetActiveSlug(urlRecord.EntityId, urlRecord.EntityName, urlRecord.LanguageId);
-                if (string.IsNullOrEmpty(activeSlug))
-                {
-                    //no active slug found
-                    currentRouteData.Values["controller"] = "Common";
-                    currentRouteData.Values["action"] = "PageNotFound";
-                    context.RouteData = currentRouteData;
-
-                    //route request
-                    return _target.RouteAsync(context);
-                }
-
-                //the active one is found
-                var webHelper = EngineContext.Current.Resolve<IWebHelper>();
-                var location = string.Format("{0}{1}", webHelper.GetStoreLocation(), activeSlug);
-                context.HttpContext.Response.Redirect(location, true);
-                return Task.CompletedTask;
-            }
-
-            //ensure that the slug is the same for the current language
-            //otherwise, it can cause some issues when customers choose a new language but a slug stays the same
+            //ensure that the slug is the same for the current language, 
+            //otherwise it can cause some issues when customers choose a new language but a slug stays the same
             var workContext = EngineContext.Current.Resolve<IWorkContext>();
             var slugForCurrentLanguage = SeoExtensions.GetSeName(urlRecord.EntityId, urlRecord.EntityName, workContext.WorkingLanguage.Id);
             if (!string.IsNullOrEmpty(slugForCurrentLanguage) && !slugForCurrentLanguage.Equals(slug, StringComparison.InvariantCultureIgnoreCase))
             {
                 //we should make validation above because some entities does not have SeName for standard (Id = 0) language (e.g. news, blog posts)
-                var webHelper = EngineContext.Current.Resolve<IWebHelper>();
-                var location = string.Format("{0}{1}", webHelper.GetStoreLocation(), slugForCurrentLanguage);
-                context.HttpContext.Response.Redirect(location, false);
-                return Task.CompletedTask;
+
+                //redirect to the page for current language
+                var redirectionRouteData = new RouteData(context.RouteData);
+                redirectionRouteData.Values["controller"] = "Common";
+                redirectionRouteData.Values["action"] = "InternalRedirect";
+                redirectionRouteData.Values["url"] = $"{pathBase}/{slugForCurrentLanguage}{context.HttpContext.Request.QueryString}";
+                redirectionRouteData.Values["permanentRedirect"] = false;
+                context.HttpContext.Items["nop.RedirectFromGenericPathRoute"] = true;
+                context.RouteData = redirectionRouteData;
+                return _target.RouteAsync(context);
             }
 
-            //process URL
+            //since we are here, all is ok with the slug, so process URL
+            var currentRouteData = new RouteData(context.RouteData);
             switch (urlRecord.EntityName.ToLowerInvariant())
             {
                 case "product":
@@ -163,8 +188,7 @@ namespace Nop.Web.Framework.Seo
                     currentRouteData.Values["SeName"] = urlRecord.Slug;
                     break;
                 default:
-                    //no record found
-                    //thus generate an event this way developers could insert their own types
+                    //no record found, thus generate an event this way developers could insert their own types
                     EngineContext.Current.Resolve<IEventPublisher>().Publish(new CustomUrlRecordEntityNameRequested(currentRouteData, urlRecord));
                     break;
             }
@@ -174,6 +198,6 @@ namespace Nop.Web.Framework.Seo
             return _target.RouteAsync(context);
         }
 
-#endregion
+        #endregion
     }
 }

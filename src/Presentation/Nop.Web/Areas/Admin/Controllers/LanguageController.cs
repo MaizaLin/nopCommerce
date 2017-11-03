@@ -2,27 +2,24 @@
 using System.IO;
 using System.Linq;
 using System.Text;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
-using Nop.Admin.Extensions;
-using Nop.Admin.Models.Localization;
-using Nop.Core;
+using Nop.Web.Areas.Admin.Extensions;
+using Nop.Web.Areas.Admin.Models.Localization;
 using Nop.Core.Domain.Localization;
 using Nop.Services.Directory;
 using Nop.Services.Localization;
 using Nop.Services.Logging;
 using Nop.Services.Security;
 using Nop.Services.Stores;
-using Nop.Web.Framework;
-using Nop.Web.Framework.Controllers;
 using Nop.Web.Framework.Extensions;
 using Nop.Web.Framework.Kendoui;
 using Nop.Web.Framework.Mvc;
 using Nop.Web.Framework.Mvc.Filters;
-using Nop.Web.Framework.Security;
 
-namespace Nop.Admin.Controllers
+namespace Nop.Web.Areas.Admin.Controllers
 {
     public partial class LanguageController : BaseAdminController
     {
@@ -35,10 +32,11 @@ namespace Nop.Admin.Controllers
         private readonly IStoreMappingService _storeMappingService;
         private readonly IPermissionService _permissionService;
         private readonly ICustomerActivityService _customerActivityService;
+        private readonly IHostingEnvironment _hostingEnvironment;
 
         #endregion
 
-        #region Constructors
+        #region Ctor
 
         public LanguageController(ILanguageService languageService,
             ILocalizationService localizationService,
@@ -46,7 +44,8 @@ namespace Nop.Admin.Controllers
             IStoreService storeService,
             IStoreMappingService storeMappingService,
             IPermissionService permissionService,
-            ICustomerActivityService customerActivityService)
+            ICustomerActivityService customerActivityService,
+            IHostingEnvironment hostingEnvironment)
         {
             this._localizationService = localizationService;
             this._languageService = languageService;
@@ -55,6 +54,7 @@ namespace Nop.Admin.Controllers
             this._storeMappingService = storeMappingService;
             this._permissionService = permissionService;
             this._customerActivityService = customerActivityService;
+            this._hostingEnvironment = hostingEnvironment;
         }
 
         #endregion
@@ -64,7 +64,7 @@ namespace Nop.Admin.Controllers
         protected virtual void PrepareStoresMappingModel(LanguageModel model, Language language, bool excludeProperties)
         {
             if (model == null)
-                throw new ArgumentNullException("model");
+                throw new ArgumentNullException(nameof(model));
 
             if (!excludeProperties && language != null)
                 model.SelectedStoreIds = _storeMappingService.GetStoresIdsWithAccess(language).ToList();
@@ -84,7 +84,7 @@ namespace Nop.Admin.Controllers
         protected virtual void PrepareCurrenciesModel(LanguageModel model)
         {
             if (model == null)
-                throw new ArgumentNullException("model");
+                throw new ArgumentNullException(nameof(model));
 
             //templates
             model.AvailableCurrencies.Add(new SelectListItem
@@ -150,7 +150,7 @@ namespace Nop.Admin.Controllers
             if (!_permissionService.Authorize(StandardPermissionProvider.ManageLanguages))
                 return AccessDeniedKendoGridJson();
 
-            var languages = _languageService.GetAllLanguages(true);
+            var languages = _languageService.GetAllLanguages(true, loadCacheableCopy: false);
             var gridModel = new DataSourceResult
             {
                 Data = languages.Select(x => x.ToModel()),
@@ -219,7 +219,7 @@ namespace Nop.Admin.Controllers
             if (!_permissionService.Authorize(StandardPermissionProvider.ManageLanguages))
                 return AccessDeniedView();
 
-            var language = _languageService.GetLanguageById(id);
+            var language = _languageService.GetLanguageById(id, false);
             if (language == null)
                 //No language found with the specified id
                 return RedirectToAction("List");
@@ -239,7 +239,7 @@ namespace Nop.Admin.Controllers
             if (!_permissionService.Authorize(StandardPermissionProvider.ManageLanguages))
                 return AccessDeniedView();
 
-            var language = _languageService.GetLanguageById(model.Id);
+            var language = _languageService.GetLanguageById(model.Id, false);
             if (language == null)
                 //No language found with the specified id
                 return RedirectToAction("List");
@@ -247,7 +247,7 @@ namespace Nop.Admin.Controllers
             if (ModelState.IsValid)
             {
                 //ensure we have at least one published language
-                var allLanguages = _languageService.GetAllLanguages();
+                var allLanguages = _languageService.GetAllLanguages(loadCacheableCopy: false);
                 if (allLanguages.Count == 1 && allLanguages[0].Id == language.Id &&
                     !model.Published)
                 {
@@ -293,13 +293,13 @@ namespace Nop.Admin.Controllers
             if (!_permissionService.Authorize(StandardPermissionProvider.ManageLanguages))
                 return AccessDeniedView();
 
-            var language = _languageService.GetLanguageById(id);
+            var language = _languageService.GetLanguageById(id, false);
             if (language == null)
                 //No language found with the specified id
                 return RedirectToAction("List");
 
             //ensure we have at least one published language
-            var allLanguages = _languageService.GetAllLanguages();
+            var allLanguages = _languageService.GetAllLanguages(loadCacheableCopy: false);
             if (allLanguages.Count == 1 && allLanguages[0].Id == language.Id)
             {
                 ErrorNotification(_localizationService.GetResource("Admin.Configuration.Languages.PublishedLanguageRequired"));
@@ -324,7 +324,7 @@ namespace Nop.Admin.Controllers
                 return Json("Access denied");
 
             var flagNames = Directory
-                .EnumerateFiles(CommonHelper.MapPath("~/wwwroot/images/flags/"), "*.png", SearchOption.TopDirectoryOnly)
+                .EnumerateFiles(Path.Combine(_hostingEnvironment.WebRootPath, "images\\flags"), "*.png", SearchOption.TopDirectoryOnly)
                 .Select(Path.GetFileName)
                 .ToList();
 
@@ -342,16 +342,13 @@ namespace Nop.Admin.Controllers
         #region Resources
 
         [HttpPost]
-        //do not validate request token (XSRF)
-        //for some reasons it does not work with "filtering" support
-        [AdminAntiForgery(true)]
         public virtual IActionResult Resources(int languageId, DataSourceRequest command, LanguageResourcesListModel model)
         {
             if (!_permissionService.Authorize(StandardPermissionProvider.ManageLanguages))
                 return AccessDeniedKendoGridJson();
 
             var query = _localizationService
-                .GetAllResourceValues(languageId)
+                .GetAllResourceValues(languageId, null)
                 .OrderBy(x => x.Key)
                 .AsQueryable();
 
@@ -467,7 +464,7 @@ namespace Nop.Admin.Controllers
             if (!_permissionService.Authorize(StandardPermissionProvider.ManageLanguages))
                 return AccessDeniedView();
 
-            var language = _languageService.GetLanguageById(id);
+            var language = _languageService.GetLanguageById(id, false);
             if (language == null)
                 //No language found with the specified id
                 return RedirectToAction("List");
@@ -490,15 +487,10 @@ namespace Nop.Admin.Controllers
             if (!_permissionService.Authorize(StandardPermissionProvider.ManageLanguages))
                 return AccessDeniedView();
 
-            var language = _languageService.GetLanguageById(id);
+            var language = _languageService.GetLanguageById(id, false);
             if (language == null)
                 //No language found with the specified id
                 return RedirectToAction("List");
-
-#if NET451
-//set page timeout to 5 minutes
-            this.Server.ScriptTimeout = 300;
-#endif
 
             try
             {
@@ -506,7 +498,7 @@ namespace Nop.Admin.Controllers
                 {
                     using (var sr = new StreamReader(importxmlfile.OpenReadStream(), Encoding.UTF8))
                     {
-                        string content = sr.ReadToEnd();
+                        var content = sr.ReadToEnd();
                         _localizationService.ImportResourcesFromXml(language, content);
                     }
 
@@ -525,7 +517,6 @@ namespace Nop.Admin.Controllers
                 ErrorNotification(exc);
                 return RedirectToAction("Edit", new { id = language.Id });
             }
-
         }
 
         #endregion
